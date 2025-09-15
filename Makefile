@@ -57,3 +57,7 @@ stats: ## Show container CPU / Memory / IO Utilization
 .PHONY: load-test
 load-test: ## Manually execute python load test. REQUIRES PYTHON INSTALLATION
 	./load_test/run.sh
+
+.PHONY: run-middleware
+run-middleware:
+	cd go_middleware && go run main.go

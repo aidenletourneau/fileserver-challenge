@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"net/http"
-
+	"strconv"
+	"strings"
 	"sync"
 
 	"rsc.io/quote"
@@ -36,12 +38,18 @@ func (k *keyedLocks) get(key string) *sync.RWMutex {
 var httpClient = &http.Client{}
 var fileLocks = newKeyedLocks()
 
-const serverUrl string = "http://localhost:1234/api/fileserver"
+const port string = "8080"
+const serverUrl string = "http://localhost:900#/api/fileserver"
+
+func hashKey(key string) uint32 {
+	h := fnv.New32a()
+	h.Write([]byte(key))
+	return (h.Sum32() % 5) + 1
+}
 
 func main() {
 	test := quote.Hello()
 	fmt.Println(test)
-	const port string = "8080"
 
 	// a request multiplexer distributes requests to their corresponding url endpoints or "patterns"
 	mux := http.NewServeMux()
@@ -51,12 +59,12 @@ func main() {
 	mux.HandleFunc("GET /api/fileserver/{fileName}", getFile)
 	mux.HandleFunc("DELETE /api/fileserver/{fileName}", deleteFile)
 
-	fmt.Printf("Server listening to :%s...", port)
+	fmt.Printf("Server listening to localhost:%s...", port)
 	http.ListenAndServe(":"+port, mux)
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hi, Im Aiden\n")
+	fmt.Fprintf(w, "You've reached my fileserver middleware!\n")
 }
 
 func getHealth(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +81,9 @@ func putFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no file name given", http.StatusBadRequest)
 		return
 	}
+	// get the shard from hash of filename
+	shard := strconv.Itoa(int(hashKey(fileName)))
+	shardUrl := strings.Replace(serverUrl, "#", shard, -1)
 
 	// read body
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -87,7 +98,7 @@ func putFile(w http.ResponseWriter, r *http.Request) {
 	defer lock.Unlock()
 
 	// make new request to fileserver
-	req, err := http.NewRequest(http.MethodPut, serverUrl+"/"+fileName, bytes.NewBuffer(bodyBytes))
+	req, err := http.NewRequest(http.MethodPut, shardUrl+"/"+fileName, bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		http.Error(w, "Could not create client request", http.StatusInternalServerError)
 		return
@@ -109,13 +120,16 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no file name given", http.StatusBadRequest)
 		return
 	}
+	// get the shard from hash of filename
+	shard := strconv.Itoa(int(hashKey(fileName)))
+	shardUrl := strings.Replace(serverUrl, "#", shard, -1)
 
 	lock := fileLocks.get(fileName)
 	lock.RLock()
 	defer lock.RUnlock()
 
 	// make new request to fileserver
-	req, err := http.NewRequest(http.MethodGet, serverUrl+"/"+fileName, nil)
+	req, err := http.NewRequest(http.MethodGet, shardUrl+"/"+fileName, nil)
 	if err != nil {
 		http.Error(w, "Could not create client request", http.StatusInternalServerError)
 		return
@@ -147,12 +161,16 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// get the shard from hash of filename
+	shard := strconv.Itoa(int(hashKey(fileName)))
+	shardUrl := strings.Replace(serverUrl, "#", shard, -1)
+
 	lock := fileLocks.get(fileName)
 	lock.Lock()
 	defer lock.Unlock()
 
 	// make new request to fileserver
-	req, err := http.NewRequest(http.MethodDelete, serverUrl+"/"+fileName, nil)
+	req, err := http.NewRequest(http.MethodDelete, shardUrl+"/"+fileName, nil)
 	if err != nil {
 		http.Error(w, "Could not create client request", http.StatusInternalServerError)
 		return
