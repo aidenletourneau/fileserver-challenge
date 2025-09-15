@@ -1,0 +1,145 @@
+
+services:
+  file_server_1:
+    build:
+      context: file_server/
+    ports:
+      - "1234"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"
+      replicas: 1
+    volumes:
+      - ./.fileserver/data:/tmp/
+
+  file_server_2:
+    build:
+      context: file_server/
+    ports:
+      - "1234"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"
+      replicas: 1
+    volumes:
+      - ./.fileserver/data:/tmp/
+
+  file_server_3:
+    build:
+      context: file_server/
+    ports:
+      - "1234"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"
+      replicas: 1
+    volumes:
+      - ./.fileserver/data:/tmp/
+
+  file_server_4:
+    build:
+      context: file_server/
+    ports:
+      - "1234"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"
+      replicas: 1
+    volumes:
+      - ./.fileserver/data:/tmp/
+
+  file_server_5:
+    build:
+      context: file_server/
+    ports:
+      - "1234"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"
+      replicas: 1
+    volumes:
+      - ./.fileserver/data:/tmp/
+
+  middleware:
+    build:
+      context: ./middleware
+      dockerfile: Dockerfile.dev        # this Dockerfile should start uvicorn via debugpy
+    environment:
+      - FILE_SERVER_ADDR=http://file_server_#:1234
+      - PYTHONPATH=/app
+    ports:
+      - "8080:8080"                     # FastAPI
+      - "5678:5678"                     # debugpy
+    volumes:
+      - ./middleware:/app               # live code reload inside container
+    depends_on:
+      - file_server_1
+      - file_server_2
+      - file_server_3
+      - file_server_4
+      - file_server_5
+    deploy:
+      resources:
+        limits:
+          memory: 3000M
+          cpus: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -m 2 http://localhost:8080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+
+
+  go_load_tester:
+    container_name: go-load-tester
+    build:
+      context: go_load_test/
+    environment:
+      - FILE_SERVER_HOST=middleware            # Point this to your application middleware
+      - FILE_SERVER_PORT=8080                   # Point this to your application middleware (port will change)
+      - FILE_SERVER_PROTO=http                  # Point this to your application middleware
+      - FILE_SERVER_PATH_PREFIX=api/fileserver
+      - REQUESTS_PER_SECOND=100                   # Base requests/sec the load test will begin on.
+      - SEED_GROWTH_AMOUNT=1                    # Every second, this many more requests will be scheduled
+      - ENABLE_REQUEST_RAMP=true                # If true, every 1 minute, your seed growth rate doubles
+      - ENABLE_FILE_RAMP=true                   # If true, every 15 seconds the max possible file size written increases by 50%
+      - RANDOMLY_UPLOAD_LARGE_FILES=true        # If true, 1 out of every 100 files uploaded will be > 100MB in size
+      - MAX_FILE_COUNT=3000                     # Recommend 2-5x total REQUESTS_PER_SECOND (consider seed in this calculation)
+      - MAX_FILE_SIZE=1024                      # 1KB, but could be set to ANYTHING in live tests
+      - TERM=xterm-256color
+    volumes:
+      - ./.fileserver/data:/tmp/                # Error logs are written to this data dir under load_test.log
+    depends_on:
+      middleware:
+        condition: service_healthy
+    restart: unless-stopped
+
+
+  # python_load_tester:
+  #   container_name: python-load-tester
+  #   build:
+  #     context: python_load_test/
+  #   environment:
+  #     - FILE_SERVER_ADDR=http://middleware:8080
+  #     - REQUESTS_PER_SECOND=200
+  #     - MAX_FILE_COUNT=3000
+  #     - MAX_FILE_SIZE=1024
+  #     - TERM=xterm-256color
+  #   volumes:
+  #     - ./.fileserver/data:/tmp/
+  #   depends_on:
+  #     middleware:
+  #       condition: service_healthy
+  #   restart: unless-stopped

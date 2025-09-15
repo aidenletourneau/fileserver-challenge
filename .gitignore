@@ -21,3 +21,15 @@ python_load_test/.idea
 ## File volume
 .file-server/
 .proxy/
+
+
+# aiden slop
+.fileserver
+file_server/*
+
+
+
+.vscode
+middleware
+.python-version
+env
