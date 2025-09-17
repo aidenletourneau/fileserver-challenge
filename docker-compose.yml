@@ -70,23 +70,35 @@ services:
     volumes:
       - ./.fileserver/data:/tmp/
 
+  redis:
+    image: redis:7-alpine          # lightweight official image
+    container_name: redis-server
+    ports:
+      - "6379:6379"                # host:container
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.2"
 
-  # go_middleware:
-  #   container_name: go-middleware
-  #   build:
-  #     context: go_middleware/
-  #   ports:
-  #     - "8080:8080"
-  #     - "40000:40000" 
-  #   volumes:
-  #     - ./go_middleware:/app
-    
+  go_middleware:
+    build:
+      context: go_middleware/
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.8"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
 
-#   Add more container definitions below
 
-  # LOAD TESTER:
-  # This container is for convenience and does not count against your resource cap.
-  # Comment this out if you want to manually run load tests from the `load_test` directory.
   go_load_tester:
     container_name: load-tester
     build:
@@ -106,18 +118,21 @@ services:
       - TERM=xterm-256color
     volumes:
       - ./.fileserver/data:/tmp/                # Error logs are written to this data dir under load_test.log
+    depends_on:
+      go_middleware:
+        condition: service_healthy
+      file_server_1:
+        condition: service_started
+      file_server_2:
+        condition: service_started
+      file_server_3:
+        condition: service_started
+      file_server_4:
+        condition: service_started
+      file_server_5:
+        condition: service_started
+      redis:
+        condition: service_started
 
-#  python_load_tester:
-#    container_name: load-tester
-#    build:
-#      context: python_load_test/
-#    environment:
-#      - FILE_SERVER_ADDR=http://file_server:1234  # Point this to your application middleware (port will change)
-#      - REQUESTS_PER_SECOND=500
-#      - MAX_FILE_COUNT=3000                       # Recommend 2-5x REQUESTS_PER_SECOND
-#      - MAX_FILE_SIZE=1024                        # 1KB, but could be set to ANYTHING in live tests
-#      - TERM=xterm-256color
-#    volumes:
-#      - ./.fileserver/data:/tmp/                  # Error logs are written to this data dir under load_test.log
-#    depends_on:
-#      - file_server
+
+
